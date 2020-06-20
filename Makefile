@@ -38,7 +38,7 @@ libsurf-webext.so: $(WEBEXTOBJ) $(COBJ)
 	    $(WEBEXTOBJ) $(COBJ) $(WEBEXTLIBS)
 
 surf: $(OBJ) $(COBJ)
-	$(CC) $(SURFLDFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(COBJ) $(LIBS)
+	$(CC) $(SURFLDFLAGS) $(LDFLAGS) -I/usr/include -L/usr/lib -lwebsockets -lpthread -o $@ $(OBJ) $(COBJ) $(LIBS)
 
 clean:
 	rm -f surf $(OBJ) $(COBJ)

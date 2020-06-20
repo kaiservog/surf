@@ -32,6 +32,8 @@
 #include "arg.h"
 #include "common.h"
 
+#include <libwebsockets.h>
+
 #define LENGTH(x)               (sizeof(x) / sizeof(x[0]))
 #define CLEANMASK(mask)         (mask & (MODKEY|GDK_SHIFT_MASK))
 
@@ -398,6 +400,8 @@ setup(void)
 		}
 	}
 }
+
+
 
 void
 sigchld(int unused)
@@ -1971,11 +1975,103 @@ clickexternplayer(Client *c, const Arg *a, WebKitHitTestResult *h)
 	spawn(c, &arg);
 }
 
+Client *c;
+
+static int
+callback_nav(
+	struct lws *wsi,
+	enum lws_callback_reasons reason, void *user,
+	void *in, size_t len)
+{
+	switch(reason) {
+	case LWS_CALLBACK_CLIENT_WRITEABLE: {
+		printf("connection established\n");
+		break;
+	}
+        case LWS_CALLBACK_RECEIVE: {
+		char u[1024];
+		memcpy(u, in, len);
+		u[len] = '\0';
+	        printf("request URL:%s\n", u);
+
+		Arg arg;
+		arg.v = u;
+		loaduri(c, &arg);
+	        break;
+	}
+	default:
+		printf("unhandled callback\n");
+		break;
+
+
+	}	
+
+	return 0;
+}
+
+void
+*th_ws(struct lws_context *ctx)
+{
+	while(1){
+		lws_service(ctx, 300);
+	}
+
+	return NULL;
+}
+
+struct pss {
+	    int fd;
+};
+
+static struct lws_protocols protocols[] = {
+	{ "nav", callback_nav, sizeof(struct pss), 0 },
+	{ NULL, NULL, 0, 0 } /* terminator */
+};
+
+
+struct lws_context*
+setupws()
+{
+	int port = 9000;
+	const char *interface = NULL;
+	struct lws_context *context;
+	
+	const char *cert_path = NULL;
+	const char *key_path = NULL;
+
+	struct lws_context_creation_info info;
+	int opts = 0;
+
+	memset(&info, 0, sizeof info);
+	info.port = port;
+	info.iface = interface;
+	info.protocols = &protocols;
+	info.ssl_cert_filepath = cert_path;
+	info.ssl_private_key_filepath = key_path;
+	info.gid = -1;
+	info.uid = -1;
+	info.options = opts;
+
+	context = lws_create_context(&info);
+
+	if (context == NULL) {
+		fprintf(stderr, "ws failed");
+		return -1;
+	}
+
+	printf("starting ws\n");
+
+	pthread_t thread_id;
+	pthread_create(&thread_id, NULL, th_ws, context);
+
+	return context;
+}
+
+
 int
 main(int argc, char *argv[])
 {
 	Arg arg;
-	Client *c;
 
 	memset(&arg, 0, sizeof(arg));
 
@@ -2114,6 +2210,7 @@ main(int argc, char *argv[])
 		arg.v = "about:blank";
 
 	setup();
+	struct lws_context *ctxws = setupws();
 	c = newclient(NULL);
 	showview(NULL, c);
 
@@ -2123,5 +2220,8 @@ main(int argc, char *argv[])
 	gtk_main();
 	cleanup();
 
+	//destroy websocket
+	printf("killing ws\n");
+	lws_context_destroy(ctxws);
 	return 0;
 }
